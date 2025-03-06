@@ -1,0 +1,67 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: postgres_db
+    restart: always
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${PASSWORD_DB}
+      POSTGRES_DB: cloud-file-storage
+    healthcheck:
+      test: pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+    networks:
+      - my_network
+
+
+  redis:
+    image: redis:7.4.2
+    container_name: redis_db
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: redis-cli ping
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 5
+    networks:
+      - my_network
+
+  minio:
+    image: minio/minio:latest
+    container_name: minio_db
+    restart: always
+    ports:
+      - "9000:9000"  # port 4 API
+      - "9001:9001"  # port 4 control
+    environment:
+      MINIO_ROOT_USER: ${MINIO_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - my_network
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+  redis_data:
+  minio_data:
+
+networks:
+  my_network:
+    driver: bridge
