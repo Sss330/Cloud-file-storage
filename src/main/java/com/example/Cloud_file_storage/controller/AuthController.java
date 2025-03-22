@@ -2,8 +2,8 @@ package com.example.Cloud_file_storage.controller;
 
 import com.example.Cloud_file_storage.dto.UserDto;
 import com.example.Cloud_file_storage.mapper.UserMapper;
-import com.example.Cloud_file_storage.model.User;
 import com.example.Cloud_file_storage.service.AuthService;
+import com.example.Cloud_file_storage.service.StorageService;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -21,12 +21,12 @@ public class AuthController {
 
     private final AuthService authService;
     private final UserMapper userMapper;
+    private final StorageService storageService;
 
     @PostMapping("/sign-up")
-    public ResponseEntity<UserDto> signUp(@Valid @RequestBody UserDto userDto) {
-
-        User user = authService.signUp(userDto.getLogin(), userDto.getPassword());
-        return ResponseEntity.status(HttpStatus.CREATED).body(userMapper.toDto(user));
+    public ResponseEntity<UserDto> signUp(@Valid @RequestBody UserDto userDto) throws Exception {
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(userMapper.toDto(authService.signUp(userDto.getLogin(), userDto.getPassword())));
     }
 
     @PostMapping("/sign-in")

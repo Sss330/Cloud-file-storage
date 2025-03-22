@@ -17,6 +17,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
@@ -26,27 +27,31 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final AuthenticationManager authenticationManager;
+    private final StorageService storageService;
 
+    @Transactional
     public User signUp(String login, String password) {
 
-        try {
-            if (userRepository.existsUserByLogin(login)) {
-                throw new LoginAlreadyTakenException("");
-            }
-
-            User user = User.builder()
-                    .login(login)
-                    .password(passwordEncoder.encode(password))
-                    .build();
-            userRepository.save(user);
-            log.info("User saved by login {}", user);
-
-            authUser(login, password);
-            return user;
-
-        } catch (UnknownException e) {
-            throw new UnknownException("");
+        if (userRepository.existsUserByLogin(login)) {
+            throw new LoginAlreadyTakenException("Login already taken");
         }
+
+        User user = User.builder()
+                .login(login)
+                .password(passwordEncoder.encode(password))
+                .build();
+        userRepository.save(user);
+        log.info("User saved by id - {}", user.getId());
+
+        try {
+            storageService.createUserFolder(user.getId());
+        } catch (Exception e) {
+            userRepository.delete(user);
+            throw new UnknownException("Folder not created ");
+        }
+
+        authUser(login, password);
+        return user;
     }
 
     public User signIn(String login, String password) {
@@ -79,6 +84,6 @@ public class AuthService {
         return ((CustomUserDetails) SecurityContextHolder.getContext()
                 .getAuthentication()
                 .getPrincipal())
-                .getUser();
+                .user();
     }
 }

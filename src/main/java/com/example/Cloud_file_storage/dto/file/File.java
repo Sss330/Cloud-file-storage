@@ -6,8 +6,8 @@ import lombok.Data;
 @Builder
 @Data
 public class File {
-    private final String type = "FILE";
     private String path;
     private String name;
     private Long size;
+    private final String type = "FILE";
 }
