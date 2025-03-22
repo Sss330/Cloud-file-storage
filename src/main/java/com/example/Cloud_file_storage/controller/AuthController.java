@@ -36,6 +36,7 @@ public class AuthController {
                 .body(userMapper.toDto(authService.signIn(userDto.getLogin(), userDto.getPassword())));
     }
 
+
     @PostMapping("/sign-out")
     public ResponseEntity<String> logout(HttpSession session) {
         authService.logOut(session);
