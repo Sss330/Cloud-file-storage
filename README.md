@@ -46,4 +46,8 @@ Multi-user cloud file storage with REST API and web interface management. Inspir
 ### 1. Clone the repository
 ```bash
 git clone https://github.com/Sss330/Cloud-file-storage.git
-cd Cloud-file-storage
+```
+### 2. Edit aplication.propiertis and docker compose to u`r values, than run docker images 
+
+### 3. Create pstgr DB and started migration  
+
