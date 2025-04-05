@@ -1,6 +1,8 @@
 package com.example.Cloud_file_storage.controller;
 
-import com.example.Cloud_file_storage.model.User;
+import com.example.Cloud_file_storage.dto.UserResponseDto;
+import com.example.Cloud_file_storage.security.CustomUserDetails;
+import com.example.Cloud_file_storage.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -13,9 +15,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/user")
 public class UserController {
 
+    private final UserService userService;
 
     @GetMapping("/me")
-    public ResponseEntity<User> getMe(@AuthenticationPrincipal User user) {
-        return ResponseEntity.ok().body(user);
+    public ResponseEntity<UserResponseDto> getMe(@AuthenticationPrincipal CustomUserDetails user) {
+        return ResponseEntity.ok().body(userService.getUser(user));
     }
 }

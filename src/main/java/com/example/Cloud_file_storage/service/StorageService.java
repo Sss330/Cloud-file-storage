@@ -2,7 +2,11 @@ package com.example.Cloud_file_storage.service;
 
 
 import com.example.Cloud_file_storage.dto.ResourceInfoDto;
+import com.example.Cloud_file_storage.exception.common.UnknownException;
 import com.example.Cloud_file_storage.exception.storage.InvalidPathException;
+import com.example.Cloud_file_storage.exception.storage.ResourceNotFoundException;
+import com.example.Cloud_file_storage.service.storage.FileService;
+import com.example.Cloud_file_storage.service.storage.FolderService;
 import io.minio.*;
 import io.minio.errors.ErrorResponseException;
 import io.minio.messages.Item;
@@ -12,136 +16,156 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.io.ByteArrayInputStream;
-import java.util.Optional;
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class StorageService {
 
-    private final MinioClient minioClient;
     @Value("${minio.bucket}")
     String bucketName;
 
     private final MinioClient client;
+    private final FileService fileService;
+    private final FolderService folderService;
 
-    public Optional<ResourceInfoDto> getResourceInfo(String path) throws Exception {
-        validatePath(path);
-
-        if (isFolder(path)) {
-            return getFolderInfo(path);
-        } else {
-            return getFileInfo(path);
+    public ResourceInfoDto getResourceInfo(String path, Long id) throws Exception {
+        try {
+            String fullPath = makePathForCurrentUser(path, id);
+            if (isFolder(fullPath)) {
+                return folderService.getFolderInfo(fullPath);
+            }
+            return fileService.getFileInfo(fullPath);
+        } catch (ErrorResponseException e) {
+            throw new ResourceNotFoundException("Resource not found " + path);
+        } catch (Exception e) {
+            throw new UnknownException("Failed to get resource info ");
         }
+    }
+
+    public void deleteResource(String path) throws Exception {
+
+        try {
+            if (isFolder(path)) {
+                folderService.deleteFolder(path);
+            } else {
+                fileService.deleteFile(path);
+            }
+        } catch (ErrorResponseException e) {
+            throw new ResourceNotFoundException("Resource not found");
+        }
+    }
+
+  /*  public ResourceInfoDto moveResource(String from, String to) throws Exception {
+        if (!isResourceExists(from)) {
+            throw new ResourceNotFoundException("Resource not found " + from);
+        }
+
+        if (isResourceExists(to)) {
+            throw new ResourceConflictException("Resource already exist  " + to);
+        }
+
+        if (isFolder(from)) {
+            folderService.moveFolder(from, to);
+        } else {
+            fileService.moveFile(from, to);
+        }
+
+        return getResourceInfo(to);
+    }*/
+
+    public InputStream downloadResource(String path) throws Exception {
+        if (isFolder(path)) {
+            return folderService.downloadFolder(path);
+        }
+        return fileService.downloadFile(path);
     }
 
     @PostConstruct
     public void initBucket() throws Exception {
-        boolean isExist = client.bucketExists(BucketExistsArgs.builder()
-                .bucket(bucketName)
-                .build());
+        boolean isExist = client.bucketExists(
+                BucketExistsArgs.builder()
+                        .bucket(bucketName)
+                        .build());
 
         if (!isExist) {
             client.makeBucket(MakeBucketArgs.builder().bucket(bucketName).build());
-            log.info("Bucket {} created", bucketName);
+            log.info("Bucket created {}", bucketName);
         }
     }
 
-    public void createUserFolder(Long id) throws Exception {
-        String nameUserFolder = "user-" + id + "-files/";
+    public List<ResourceInfoDto> searchResource(String query) throws Exception {
 
-        if (!isFolderExists(nameUserFolder)) {
-            client.putObject(
-                    PutObjectArgs.builder()
-                            .bucket(bucketName)
-                            .object(nameUserFolder)
-                            .stream(new ByteArrayInputStream(new byte[0]), 0, -1)
-                            .build());
-            log.info("User folder created: {}", nameUserFolder);
+        List<ResourceInfoDto> resultsOfSearching = new ArrayList<>();
+        Iterable<Result<Item>> results = client.listObjects(ListObjectsArgs.builder()
+                .bucket(bucketName)
+                .prefix(query)
+                .recursive(true)
+                .build());
+
+        for (Result<Item> itemResult : results) {
+            Item item = itemResult.get();
+            /*if (item.objectName().contains(query)) {
+                resultsOfSearching.add(getResourceInfo(item.objectName()));
+            }*/
         }
-
+        return resultsOfSearching;
     }
 
-    private void validatePath(String path) {
-        if (path == null || path.isEmpty()) {
-            throw new InvalidPathException("Invalid path: " + path);
-        }
+    public ResourceInfoDto uploadResource(String path, InputStream inputStream, Long size, Long id) throws Exception {
+        String fullPath = makePathForCurrentUser(path, id);
+        client.putObject(PutObjectArgs.builder()
+                .stream(inputStream, size, -1)
+                .object(fullPath)
+                .bucket(bucketName)
+                .build());
+        return getResourceInfo(fullPath, id);
     }
 
-    private Optional<ResourceInfoDto> getFileInfo(String path) throws Exception {
+
+    public String getFilenameFromPath(String path) {
+        return path.replace("/", "_").replaceAll("_+$", "");
+    }
+
+    private boolean isResourceExists(String path) {
         try {
-            StatObjectResponse stat = client.statObject(
+            client.statObject(
                     StatObjectArgs.builder()
                             .bucket(bucketName)
                             .object(path)
                             .build());
-
-            return Optional.of(ResourceInfoDto.builder()
-                    .path(path)
-                    .name(getResourceName(path))
-                    .size(stat.size())
-                    .type("FILE")
-                    .build());
-        } catch (ErrorResponseException e) {
-            return Optional.empty();
-        }
-    }
-
-    private Optional<ResourceInfoDto> getFolderInfo(String path) {
-        try {
-            if (!path.endsWith("/")) {
-                path = path + "/";
-            }
-
-            Iterable<Result<Item>> results = client.listObjects(
-                    ListObjectsArgs.builder()
-                            .bucket(bucketName)
-                            .prefix(path)
-                            .maxKeys(1)
-                            .build());
-
-            if (results.iterator().hasNext()) {
-                return Optional.of(ResourceInfoDto.builder()
-                        .path(path)
-                        .name(getResourceName(path))
-                        .type("DIRECTORY")
-                        .build());
-            } else {
-                return Optional.empty();
-            }
+            return true;
         } catch (Exception e) {
-            return Optional.empty();
+            return false;
         }
     }
 
-    private String getResourceName(String path) {
-
-        String normalizedPath = path.replaceAll("/+$", "");
-        int lastSlashIndex = normalizedPath.lastIndexOf('/');
-
-        if (lastSlashIndex == -1) {
-            return normalizedPath;
-        }
-
-        return normalizedPath.substring(lastSlashIndex + 1);
+    private String makePathForCurrentUser(String path, Long id) {
+        return "user-" + id + "-files/" + path;
     }
-
 
     private boolean isFolder(String path) {
         return path.endsWith("/");
     }
 
-    private boolean isFolderExists(String folderName) {
-        try {
-            client.statObject(
-                    StatObjectArgs.builder()
-                            .bucket(bucketName)
-                            .object(folderName + "/")
-                            .build());
-            return true;
-        } catch (Exception e) {
-            return false;
+    private void validatePath(String path) {
+
+        if (path == null || path.isEmpty()) {
+            throw new InvalidPathException("Invalid path " + path);
+        }
+
+        if (path.contains("/")) {
+            String name = path.substring(path.lastIndexOf('/') + 1);
+            if (isFolder(path) && name.contains(".")) {
+                throw new InvalidPathException("Folder name cannot contain a dot ");
+            }
+        }
+
+        if (!path.matches("^[а-я-А-Яa-zA-Z0-9_\\-/]+$")) {
+            throw new InvalidPathException("Invalid characters in path " + path);
         }
     }
 }
