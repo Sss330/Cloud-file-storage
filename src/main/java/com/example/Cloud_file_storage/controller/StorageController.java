@@ -36,9 +36,11 @@ public class StorageController {
     }
 
     @DeleteMapping
-    public ResponseEntity<Void> deleteResource(@RequestParam String path) throws Exception {
-        storageService.deleteResource(path);
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<Void> deleteResource(@AuthenticationPrincipal CustomUserDetails user, @RequestParam String path) throws Exception {
+        storageService.deleteResource(path, user.getUser().getId());
+        return ResponseEntity
+                .noContent()
+                .build();
     }
 
     @Operation(summary = "Downloading zip-file")

@@ -4,7 +4,6 @@ import com.example.Cloud_file_storage.dto.ResourceInfoDto;
 import com.example.Cloud_file_storage.exception.common.UnknownException;
 import com.example.Cloud_file_storage.exception.storage.ResourceNotFoundException;
 import io.minio.*;
-import io.minio.messages.DeleteObject;
 import io.minio.messages.Item;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -47,7 +46,7 @@ public class FolderService {
     public void createUserFolder(Long id) throws Exception {
         String nameUserFolder = "user-" + id.toString() + "-files/";
 
-        if (!isFolderExists(nameUserFolder)) {
+        if (isFolderExists(nameUserFolder)) {
             client.putObject(
                     PutObjectArgs.builder()
                             .bucket(bucketName)
@@ -120,29 +119,26 @@ public class FolderService {
         }
     }
 
-
     public void deleteFolder(String path) throws Exception {
-
-        Iterable<Result<Item>> results = client.listObjects(
+        Iterable<Result<Item>> objects = client.listObjects(
                 ListObjectsArgs.builder()
                         .bucket(bucketName)
                         .prefix(path)
                         .recursive(true)
                         .build());
 
-        List<DeleteObject> objectsToDelete = new ArrayList<>();
-        for (Result<Item> result : results) {
-            objectsToDelete.add(new DeleteObject(result.get().objectName()));
+        for (Result<Item> itemResult : objects) {
+            Item item = itemResult.get();
+            client.removeObject(
+                    RemoveObjectArgs.builder()
+                            .bucket(bucketName)
+                            .object(item.objectName())
+                            .build());
         }
-        client.removeObjects(
-                RemoveObjectsArgs.builder()
-                        .bucket(bucketName)
-                        .objects(objectsToDelete)
-                        .build());
     }
 
     public void moveFolder(String from, String to) throws Exception {
-
+        //todo добавить путь к папке юзера
         Iterable<Result<Item>> items = client.listObjects(
                 ListObjectsArgs.builder()
                         .bucket(bucketName)
@@ -206,16 +202,18 @@ public class FolderService {
 
     public boolean isFolderExists(String folderName) {
         try {
+            String normalizedPath = folderName.endsWith("/") ? folderName : folderName + "/";
+
             Iterable<Result<Item>> results = client.listObjects(
                     ListObjectsArgs.builder()
                             .bucket(bucketName)
-                            .prefix(folderName)
-                            .delimiter("/")
+                            .prefix(normalizedPath)
                             .maxKeys(1)
                             .build());
-            return results.iterator().hasNext();
+            return !results.iterator().hasNext();
         } catch (Exception e) {
-            return false;
+            log.error("Error checking folder exist ");
+            return true;
         }
     }
 
@@ -225,23 +223,15 @@ public class FolderService {
 
     private String getResourceName(String path) {
 
-        String normalizedPath = path.replaceAll("/+$", "");
-        int lastSlashIndex = normalizedPath.lastIndexOf('/');
+        String cleanPath = path.replaceAll("/+$", "");
 
-        if (lastSlashIndex == -1) {
-            return normalizedPath;
-        }
+        int lastSlash = cleanPath.lastIndexOf('/');
+        String name = (lastSlash >= 0) ? cleanPath.substring(lastSlash + 1) : cleanPath;
 
-        return normalizedPath.substring(lastSlashIndex + 1);
+        return isFolder(path) && !name.isEmpty() ? name + "/" : name;
     }
 
-    private String normalizedFolderPath(String path) {
-        return path.endsWith("/") ? path : path + "/";
+    private boolean isFolder(String path) {
+        return path.endsWith("/");
     }
-
-    private String make(String path) {
-        return path.endsWith("/") ? path : path + "/";
-    }
-
-
 }

@@ -3,7 +3,9 @@ package com.example.Cloud_file_storage.service;
 
 import com.example.Cloud_file_storage.dto.ResourceInfoDto;
 import com.example.Cloud_file_storage.exception.common.UnknownException;
+import com.example.Cloud_file_storage.exception.storage.DeletingResourceException;
 import com.example.Cloud_file_storage.exception.storage.InvalidPathException;
+import com.example.Cloud_file_storage.exception.storage.ResourceConflictException;
 import com.example.Cloud_file_storage.exception.storage.ResourceNotFoundException;
 import com.example.Cloud_file_storage.service.storage.FileService;
 import com.example.Cloud_file_storage.service.storage.FolderService;
@@ -35,6 +37,7 @@ public class StorageService {
     public ResourceInfoDto getResourceInfo(String path, Long id) throws Exception {
         try {
             String fullPath = makePathForCurrentUser(path, id);
+
             if (isFolder(fullPath)) {
                 return folderService.getFolderInfo(fullPath);
             }
@@ -46,20 +49,25 @@ public class StorageService {
         }
     }
 
-    public void deleteResource(String path) throws Exception {
+    public void deleteResource(String path, Long id) throws Exception {
 
         try {
             if (isFolder(path)) {
-                folderService.deleteFolder(path);
+                String normalizedPath = path.endsWith("/") ? path : path + "/";
+                folderService.deleteFolder(normalizedPath);
             } else {
+                client.statObject(StatObjectArgs.builder()
+                        .bucket(bucketName)
+                        .object(path)
+                        .build());
                 fileService.deleteFile(path);
             }
-        } catch (ErrorResponseException e) {
-            throw new ResourceNotFoundException("Resource not found");
+        } catch (Exception e) {
+            throw new DeletingResourceException("Deleting error with path " + path);
         }
     }
 
-  /*  public ResourceInfoDto moveResource(String from, String to) throws Exception {
+    public ResourceInfoDto moveResource(String from, String to, Long id) throws Exception {
         if (!isResourceExists(from)) {
             throw new ResourceNotFoundException("Resource not found " + from);
         }
@@ -69,13 +77,15 @@ public class StorageService {
         }
 
         if (isFolder(from)) {
+            //todo добавить путь к папке юзера
             folderService.moveFolder(from, to);
         } else {
+            //todo добавить путь к папке юзера
             fileService.moveFile(from, to);
         }
 
-        return getResourceInfo(to);
-    }*/
+        return getResourceInfo(to, id);
+    }
 
     public InputStream downloadResource(String path) throws Exception {
         if (isFolder(path)) {
@@ -157,14 +167,7 @@ public class StorageService {
             throw new InvalidPathException("Invalid path " + path);
         }
 
-        if (path.contains("/")) {
-            String name = path.substring(path.lastIndexOf('/') + 1);
-            if (isFolder(path) && name.contains(".")) {
-                throw new InvalidPathException("Folder name cannot contain a dot ");
-            }
-        }
-
-        if (!path.matches("^[а-я-А-Яa-zA-Z0-9_\\-/]+$")) {
+        if (!path.matches("^[a-zA-Z0-9_\\-/]+$")) {
             throw new InvalidPathException("Invalid characters in path " + path);
         }
     }

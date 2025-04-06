@@ -32,7 +32,6 @@ public class AuthController {
     @Operation(summary = "authorization")
     @PostMapping("/sign-in")
     public ResponseEntity<UserDto> signIn(@Valid @RequestBody UserDto userDto) {
-
         return ResponseEntity
                 .ok()
                 .body(userMapper.toDto(authService.signIn(userDto.getUsername(), userDto.getPassword())));

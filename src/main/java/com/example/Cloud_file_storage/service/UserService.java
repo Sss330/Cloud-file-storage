@@ -1,13 +1,15 @@
 package com.example.Cloud_file_storage.service;
 
 import com.example.Cloud_file_storage.dto.UserResponseDto;
-import org.springframework.security.core.userdetails.UserDetails;
+import com.example.Cloud_file_storage.security.CustomUserDetails;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 @Service
+@RequiredArgsConstructor
 public class UserService {
 
-    public UserResponseDto getUser(UserDetails user) {
+    public UserResponseDto getUser(CustomUserDetails user) {
         return UserResponseDto.builder()
                 .username(user.getUsername())
                 .build();

@@ -43,6 +43,7 @@ public class FileService {
     }
 
     public void deleteFile(String path) throws Exception {
+        String asd = path;
         client.removeObject(
                 RemoveObjectArgs.builder()
                         .bucket(bucketName)
@@ -60,6 +61,8 @@ public class FileService {
     }
 
     public void moveFile(String from, String to) throws Exception {
+
+        //todo добавить путь к папке юзера
         client.copyObject(
                 CopyObjectArgs.builder()
                         .bucket(bucketName)
