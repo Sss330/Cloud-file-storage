@@ -4,7 +4,6 @@ import com.example.Cloud_file_storage.dto.UserDto;
 import com.example.Cloud_file_storage.mapper.UserMapper;
 import com.example.Cloud_file_storage.service.AuthService;
 import io.swagger.v3.oas.annotations.Operation;
-import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -24,7 +23,7 @@ public class AuthController {
 
     @Operation(summary = "registration")
     @PostMapping("/sign-up")
-    public ResponseEntity<UserDto> signUp(@Valid @RequestBody UserDto userDto) throws Exception {
+    public ResponseEntity<UserDto> signUp(@Valid @RequestBody UserDto userDto) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(userMapper.toDto(authService.signUp(userDto.getUsername(), userDto.getPassword())));
     }
@@ -39,8 +38,7 @@ public class AuthController {
 
     @Operation(summary = "exit")
     @PostMapping("/sign-out")
-    public ResponseEntity<Void> logout(HttpSession session) {
-        authService.logOut(session);
+    public ResponseEntity<Void> logout() {
         return ResponseEntity.noContent().build();
     }
 

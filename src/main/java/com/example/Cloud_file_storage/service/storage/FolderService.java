@@ -58,7 +58,7 @@ public class FolderService {
 
     }
 
-    public ResourceInfoDto getFolderInfo(String path) {
+    public ResourceInfoDto getFolderInfo(String path, Long id) {
 
         try {
             Iterable<Result<Item>> results = client.listObjects(
@@ -71,7 +71,7 @@ public class FolderService {
             if (results.iterator().hasNext()) {
                 return
                         ResourceInfoDto.builder()
-                                .path(path)
+                                .path(getCleanParentPath(path, id))
                                 .name(getResourceName(path))
                                 .type("DIRECTORY")
                                 .build();
@@ -101,9 +101,12 @@ public class FolderService {
                 Item item = result.get();
                 if (item.objectName().equals(path)) continue;
 
+                String parentPath = getCleanParentPath(item.objectName(), id);
+                String name = getResourceName(item.objectName());
+
                 ResourceInfoDto resource = ResourceInfoDto.builder()
-                        .path(item.objectName())
-                        .name(getResourceName(item.objectName()))
+                        .path(parentPath)
+                        .name(name)
                         .type(item.isDir() ? "DIRECTORY" : "FILE")
                         .build();
 
@@ -137,8 +140,11 @@ public class FolderService {
         }
     }
 
-    public void moveFolder(String from, String to) throws Exception {
-        //todo добавить путь к папке юзера
+    public void moveFolder(String from, String to, Long id) throws Exception {
+        from = makePathForCurrentUser(from, id);
+        to = makePathForCurrentUser(to, id);
+
+
         Iterable<Result<Item>> items = client.listObjects(
                 ListObjectsArgs.builder()
                         .bucket(bucketName)
@@ -162,7 +168,9 @@ public class FolderService {
         deleteFolder(from);
     }
 
-    public InputStream downloadFolder(String path) throws Exception {
+    public InputStream downloadFolder(String path, Long id) throws Exception {
+        //  makePathForCurrentUser(path, id);
+
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
 
         try (ZipOutputStream zipOutputStream = new ZipOutputStream(outputStream)) {
@@ -217,6 +225,7 @@ public class FolderService {
         }
     }
 
+
     private String makePathForCurrentUser(String path, Long id) {
         return "user-" + id + "-files/" + path;
     }
@@ -229,6 +238,27 @@ public class FolderService {
         String name = (lastSlash >= 0) ? cleanPath.substring(lastSlash + 1) : cleanPath;
 
         return isFolder(path) && !name.isEmpty() ? name + "/" : name;
+    }
+
+
+    private String getCleanParentPath(String fullPath, Long userId) {
+        String cleanPath = removeUserPrefix(fullPath, userId);
+
+        if (!cleanPath.endsWith("/")) {
+            int lastSlash = cleanPath.lastIndexOf('/');
+            return lastSlash >= 0 ? cleanPath.substring(0, lastSlash + 1) : "";
+        }
+
+        String withoutTrailingSlash = cleanPath.replaceAll("/+$", "");
+        int lastSlash = withoutTrailingSlash.lastIndexOf('/');
+        return lastSlash >= 0 ? withoutTrailingSlash.substring(0, lastSlash + 1) : "";
+    }
+
+    private String removeUserPrefix(String fullPath, Long userId) {
+        String userPrefix = "user-" + userId + "-files/";
+        return fullPath.startsWith(userPrefix)
+                ? fullPath.substring(userPrefix.length())
+                : fullPath;
     }
 
     private boolean isFolder(String path) {

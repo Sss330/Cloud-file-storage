@@ -5,7 +5,6 @@ import com.example.Cloud_file_storage.dto.ResourceInfoDto;
 import com.example.Cloud_file_storage.exception.common.UnknownException;
 import com.example.Cloud_file_storage.exception.storage.DeletingResourceException;
 import com.example.Cloud_file_storage.exception.storage.InvalidPathException;
-import com.example.Cloud_file_storage.exception.storage.ResourceConflictException;
 import com.example.Cloud_file_storage.exception.storage.ResourceNotFoundException;
 import com.example.Cloud_file_storage.service.storage.FileService;
 import com.example.Cloud_file_storage.service.storage.FolderService;
@@ -39,9 +38,9 @@ public class StorageService {
             String fullPath = makePathForCurrentUser(path, id);
 
             if (isFolder(fullPath)) {
-                return folderService.getFolderInfo(fullPath);
+                return folderService.getFolderInfo(fullPath, id);
             }
-            return fileService.getFileInfo(fullPath);
+            return fileService.getFileInfo(fullPath, id);
         } catch (ErrorResponseException e) {
             throw new ResourceNotFoundException("Resource not found " + path);
         } catch (Exception e) {
@@ -50,7 +49,7 @@ public class StorageService {
     }
 
     public void deleteResource(String path, Long id) throws Exception {
-
+        path = makePathForCurrentUser(path, id);
         try {
             if (isFolder(path)) {
                 String normalizedPath = path.endsWith("/") ? path : path + "/";
@@ -68,30 +67,28 @@ public class StorageService {
     }
 
     public ResourceInfoDto moveResource(String from, String to, Long id) throws Exception {
-        if (!isResourceExists(from)) {
+       /* if (!isResourceExists(from)) {
             throw new ResourceNotFoundException("Resource not found " + from);
         }
 
         if (isResourceExists(to)) {
             throw new ResourceConflictException("Resource already exist  " + to);
-        }
+        }*/
 
         if (isFolder(from)) {
-            //todo добавить путь к папке юзера
-            folderService.moveFolder(from, to);
+            folderService.moveFolder(from, to, id);
         } else {
-            //todo добавить путь к папке юзера
-            fileService.moveFile(from, to);
+            fileService.moveFile(from, to, id);
         }
 
         return getResourceInfo(to, id);
     }
 
-    public InputStream downloadResource(String path) throws Exception {
+    public InputStream downloadResource(String path, Long id) throws Exception {
         if (isFolder(path)) {
-            return folderService.downloadFolder(path);
+            return folderService.downloadFolder(path, id);
         }
-        return fileService.downloadFile(path);
+        return fileService.downloadFile(path, id);
     }
 
     @PostConstruct
@@ -107,32 +104,63 @@ public class StorageService {
         }
     }
 
-    public List<ResourceInfoDto> searchResource(String query) throws Exception {
-
-        List<ResourceInfoDto> resultsOfSearching = new ArrayList<>();
-        Iterable<Result<Item>> results = client.listObjects(ListObjectsArgs.builder()
-                .bucket(bucketName)
-                .prefix(query)
-                .recursive(true)
-                .build());
-
-        for (Result<Item> itemResult : results) {
-            Item item = itemResult.get();
-            /*if (item.objectName().contains(query)) {
-                resultsOfSearching.add(getResourceInfo(item.objectName()));
-            }*/
+    public List<ResourceInfoDto> searchResource(String query, Long id) throws Exception {
+        if (query.isEmpty() || query.isBlank()) {
+            throw new InvalidPathException("Query is invalid, or empty " + query);
         }
-        return resultsOfSearching;
+
+        String userPrefix = "user-" + id + "-files/";
+
+        List<ResourceInfoDto> results = new ArrayList<>();
+        Iterable<Result<Item>> items = client.listObjects(
+                ListObjectsArgs.builder()
+                        .bucket(bucketName)
+                        .recursive(true)
+                        .build()
+        );
+
+        for (Result<Item> itemResult : items) {
+            Item item = itemResult.get();
+            String objectName = item.objectName();
+
+            if (objectName.startsWith(userPrefix) && objectName.substring(userPrefix.length()).contains(query)) {
+
+                String cleanPath = objectName.substring(userPrefix.length());
+                results.add(ResourceInfoDto.builder()
+                        .path(getCleanParentPath(cleanPath, id))
+                        .name(getResourceName(cleanPath))
+                        .size(item.size())
+                        .type(item.isDir() ? "DIRECTORY" : "FILE")
+                        .build());
+            }
+        }
+        return results;
     }
 
     public ResourceInfoDto uploadResource(String path, InputStream inputStream, Long size, Long id) throws Exception {
         String fullPath = makePathForCurrentUser(path, id);
+        if (isResourceExists(path)) {
+
+        }
+        String dsa = getResourceName(fullPath);
+
         client.putObject(PutObjectArgs.builder()
                 .stream(inputStream, size, -1)
                 .object(fullPath)
                 .bucket(bucketName)
                 .build());
-        return getResourceInfo(fullPath, id);
+        return getResourceInfo(getResourceName(fullPath), id);
+    }
+
+    private String getCleanParentPath(String fullPath, Long id) {
+        int lastSlash = fullPath.lastIndexOf('/');
+        return lastSlash >= 0 ? fullPath.substring(0, lastSlash + 1) : "";
+    }
+
+    private String getResourceName(String path) {
+        String cleanPath = path.replaceAll("/+$", "");
+        int lastSlash = cleanPath.lastIndexOf('/');
+        return lastSlash >= 0 ? cleanPath.substring(lastSlash + 1) : cleanPath;
     }
 
 
@@ -152,6 +180,7 @@ public class StorageService {
             return false;
         }
     }
+
 
     private String makePathForCurrentUser(String path, Long id) {
         return "user-" + id + "-files/" + path;

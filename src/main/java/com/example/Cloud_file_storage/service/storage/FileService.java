@@ -18,7 +18,7 @@ public class FileService {
     @Value("${minio.bucket}")
     String bucketName;
 
-    public ResourceInfoDto getFileInfo(String path) throws Exception {
+    public ResourceInfoDto getFileInfo(String path, Long id) throws Exception {
         try {
             if (path == null || path.isEmpty()) {
                 throw new BadRequestException("Invalid path: " + path);
@@ -32,7 +32,7 @@ public class FileService {
 
             return
                     ResourceInfoDto.builder()
-                            .path(path)
+                            .path(getCleanParentPath(path, id))
                             .name(getResourceName(path))
                             .size(stat.size())
                             .type("FILE")
@@ -43,7 +43,6 @@ public class FileService {
     }
 
     public void deleteFile(String path) throws Exception {
-        String asd = path;
         client.removeObject(
                 RemoveObjectArgs.builder()
                         .bucket(bucketName)
@@ -52,7 +51,8 @@ public class FileService {
 
     }
 
-    public InputStream downloadFile(String path) throws Exception {
+    public InputStream downloadFile(String path, Long id) throws Exception {
+        path = makePathForCurrentUser(path, id);
         return client.getObject(
                 GetObjectArgs.builder()
                         .bucket(bucketName)
@@ -60,9 +60,10 @@ public class FileService {
                         .build());
     }
 
-    public void moveFile(String from, String to) throws Exception {
+    public void moveFile(String from, String to, Long id) throws Exception {
+        from = makePathForCurrentUser(from, id);
+        to = makePathForCurrentUser(to, id);
 
-        //todo добавить путь к папке юзера
         client.copyObject(
                 CopyObjectArgs.builder()
                         .bucket(bucketName)
@@ -77,6 +78,31 @@ public class FileService {
                         .object(from)
                         .build()
         );
+    }
+
+
+    public String getCleanParentPath(String fullPath, Long userId) {
+        String cleanPath = removeUserPrefix(fullPath, userId);
+
+        if (!cleanPath.endsWith("/")) {
+            int lastSlash = cleanPath.lastIndexOf('/');
+            return lastSlash >= 0 ? cleanPath.substring(0, lastSlash + 1) : "";
+        }
+
+        String withoutTrailingSlash = cleanPath.replaceAll("/+$", "");
+        int lastSlash = withoutTrailingSlash.lastIndexOf('/');
+        return lastSlash >= 0 ? withoutTrailingSlash.substring(0, lastSlash + 1) : "";
+    }
+
+    private String removeUserPrefix(String fullPath, Long userId) {
+        String userPrefix = "user-" + userId + "-files/";
+        return fullPath.startsWith(userPrefix)
+                ? fullPath.substring(userPrefix.length())
+                : fullPath;
+    }
+
+    private String makePathForCurrentUser(String path, Long id) {
+        return "user-" + id + "-files/" + path;
     }
 
     private String getResourceName(String path) {
