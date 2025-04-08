@@ -49,5 +49,5 @@ git clone https://github.com/Sss330/Cloud-file-storage.git
 ```
 ### 2. Edit aplication.propiertis and docker compose to u`r values, than run docker images 
 
-### 3. Create pstgr DB and started migration  
+### 3. Connect to pstgr DB and start migrations  
 
