@@ -19,6 +19,8 @@ public class UserController {
 
     @GetMapping("/me")
     public ResponseEntity<UserResponseDto> getMe(@AuthenticationPrincipal CustomUserDetails user) {
-        return ResponseEntity.ok().body(userService.getUser(user));
+        return ResponseEntity
+                .ok()
+                .body(userService.getUser(user));
     }
 }

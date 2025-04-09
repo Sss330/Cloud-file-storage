@@ -10,7 +10,6 @@ import org.springframework.data.redis.serializer.GenericJackson2JsonRedisSeriali
 import org.springframework.data.redis.serializer.StringRedisSerializer;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -45,9 +44,11 @@ public class SecurityConfig {
                             response.setStatus(HttpStatus.NO_CONTENT.value());
                         })
                 )
+
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(
-                                "/api/auth/**",
+                                "/api/auth/sign-up",
+                                "/api/auth/sign-in",
                                 "/v3/api-docs/**",
                                 "/swagger-ui/**",
                                 "/assets/**",
@@ -60,11 +61,13 @@ public class SecurityConfig {
                                 "/index.html"
                         ).permitAll()
                         .anyRequest().authenticated()
+
                 )
+
                 .sessionManagement(session -> session
                         .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
                 )
-                .httpBasic(Customizer.withDefaults())
+
                 .userDetailsService(customUserDetailsService)
                 .formLogin(AbstractHttpConfigurer::disable)
                 .csrf(AbstractHttpConfigurer::disable)

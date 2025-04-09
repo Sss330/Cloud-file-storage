@@ -15,10 +15,11 @@ import java.io.InputStream;
 public class FileService {
 
     private final MinioClient client;
+    private final FolderService folderService;
     @Value("${minio.bucket}")
     String bucketName;
 
-    public ResourceInfoDto getFileInfo(String path, Long id) throws Exception {
+    public ResourceInfoDto getFileInfo(String path, Long id) {
         try {
             if (path == null || path.isEmpty()) {
                 throw new BadRequestException("Invalid path: " + path);
@@ -32,7 +33,7 @@ public class FileService {
 
             return
                     ResourceInfoDto.builder()
-                            .path(getCleanParentPath(path, id))
+                            .path(folderService.getParentPath(path, id))
                             .name(getResourceName(path))
                             .size(stat.size())
                             .type("FILE")
@@ -48,7 +49,6 @@ public class FileService {
                         .bucket(bucketName)
                         .object(path)
                         .build());
-
     }
 
     public InputStream downloadFile(String path, Long id) throws Exception {
@@ -78,27 +78,6 @@ public class FileService {
                         .object(from)
                         .build()
         );
-    }
-
-
-    public String getCleanParentPath(String fullPath, Long userId) {
-        String cleanPath = removeUserPrefix(fullPath, userId);
-
-        if (!cleanPath.endsWith("/")) {
-            int lastSlash = cleanPath.lastIndexOf('/');
-            return lastSlash >= 0 ? cleanPath.substring(0, lastSlash + 1) : "";
-        }
-
-        String withoutTrailingSlash = cleanPath.replaceAll("/+$", "");
-        int lastSlash = withoutTrailingSlash.lastIndexOf('/');
-        return lastSlash >= 0 ? withoutTrailingSlash.substring(0, lastSlash + 1) : "";
-    }
-
-    private String removeUserPrefix(String fullPath, Long userId) {
-        String userPrefix = "user-" + userId + "-files/";
-        return fullPath.startsWith(userPrefix)
-                ? fullPath.substring(userPrefix.length())
-                : fullPath;
     }
 
     private String makePathForCurrentUser(String path, Long id) {

@@ -71,7 +71,7 @@ public class FolderService {
             if (results.iterator().hasNext()) {
                 return
                         ResourceInfoDto.builder()
-                                .path(getCleanParentPath(path, id))
+                                .path(getParentPath(path, id))
                                 .name(getResourceName(path))
                                 .type("DIRECTORY")
                                 .build();
@@ -83,7 +83,7 @@ public class FolderService {
         }
     }
 
-    public List<ResourceInfoDto> getFolderContent(String path, Long id) throws Exception {
+    public List<ResourceInfoDto> getFolderContent(String path, Long id) {
 
         try {
             path = makePathForCurrentUser(path, id);
@@ -101,7 +101,7 @@ public class FolderService {
                 Item item = result.get();
                 if (item.objectName().equals(path)) continue;
 
-                String parentPath = getCleanParentPath(item.objectName(), id);
+                String parentPath = getParentPath(item.objectName(), id);
                 String name = getResourceName(item.objectName());
 
                 ResourceInfoDto resource = ResourceInfoDto.builder()
@@ -169,41 +169,44 @@ public class FolderService {
     }
 
     public InputStream downloadFolder(String path, Long id) throws Exception {
-        //  makePathForCurrentUser(path, id);
+        String normalizedPath = makePathForCurrentUser(path, id);
+
+        if (!normalizedPath.endsWith("/")) {
+            normalizedPath += "/";
+        }
 
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-
         try (ZipOutputStream zipOutputStream = new ZipOutputStream(outputStream)) {
             Iterable<Result<Item>> objects = client.listObjects(
                     ListObjectsArgs.builder()
                             .bucket(bucketName)
-                            .prefix(path)
+                            .prefix(normalizedPath)
                             .recursive(true)
                             .build());
 
+
             for (Result<Item> object : objects) {
                 Item item = object.get();
-
                 if (!item.isDir()) {
-                    ZipEntry zipEntry = new ZipEntry(item.objectName().replace(path, ""));
-                    zipOutputStream.putNextEntry(zipEntry);
+                    String relativePath = item.objectName()
+                            .substring(normalizedPath.length());
 
-                    InputStream inputStream = client.getObject(
+                    ZipEntry zipEntry = new ZipEntry(relativePath);
+                    zipOutputStream.putNextEntry(zipEntry);
+                    try (InputStream inputStream = client.getObject(
                             GetObjectArgs.builder()
                                     .bucket(bucketName)
                                     .object(item.objectName())
-                                    .build());
-                    byte[] buffer = new byte[1024];
-                    int bytesRead;
-
-                    while ((bytesRead = inputStream.read(buffer)) != -1) {
-                        zipOutputStream.write(buffer, 0, bytesRead);
+                                    .build())) {
+                        byte[] buffer = new byte[4096];
+                        int bytesRead;
+                        while ((bytesRead = inputStream.read(buffer)) != -1) {
+                            zipOutputStream.write(buffer, 0, bytesRead);
+                        }
                     }
-                    inputStream.close();
                     zipOutputStream.closeEntry();
                 }
             }
-
         }
         return new ByteArrayInputStream(outputStream.toByteArray());
     }
@@ -225,23 +228,7 @@ public class FolderService {
         }
     }
 
-
-    private String makePathForCurrentUser(String path, Long id) {
-        return "user-" + id + "-files/" + path;
-    }
-
-    private String getResourceName(String path) {
-
-        String cleanPath = path.replaceAll("/+$", "");
-
-        int lastSlash = cleanPath.lastIndexOf('/');
-        String name = (lastSlash >= 0) ? cleanPath.substring(lastSlash + 1) : cleanPath;
-
-        return isFolder(path) && !name.isEmpty() ? name + "/" : name;
-    }
-
-
-    private String getCleanParentPath(String fullPath, Long userId) {
+    public String getParentPath(String fullPath, Long userId) {
         String cleanPath = removeUserPrefix(fullPath, userId);
 
         if (!cleanPath.endsWith("/")) {
@@ -252,6 +239,19 @@ public class FolderService {
         String withoutTrailingSlash = cleanPath.replaceAll("/+$", "");
         int lastSlash = withoutTrailingSlash.lastIndexOf('/');
         return lastSlash >= 0 ? withoutTrailingSlash.substring(0, lastSlash + 1) : "";
+    }
+
+    private String makePathForCurrentUser(String path, Long id) {
+        return "user-" + id + "-files/" + path;
+    }
+
+    private String getResourceName(String path) {
+        String cleanPath = path.replaceAll("/+$", "");
+
+        int lastSlash = cleanPath.lastIndexOf('/');
+        String name = (lastSlash >= 0) ? cleanPath.substring(lastSlash + 1) : cleanPath;
+
+        return isFolder(path) && !name.isEmpty() ? name + "/" : name;
     }
 
     private String removeUserPrefix(String fullPath, Long userId) {

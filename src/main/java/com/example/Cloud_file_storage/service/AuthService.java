@@ -1,8 +1,10 @@
 package com.example.Cloud_file_storage.service;
 
+import com.example.Cloud_file_storage.dto.UserResponseDto;
 import com.example.Cloud_file_storage.exception.auth.LoginAlreadyTakenException;
 import com.example.Cloud_file_storage.exception.auth.WrongPasswordException;
 import com.example.Cloud_file_storage.exception.common.UnknownException;
+import com.example.Cloud_file_storage.mapper.UserMapper;
 import com.example.Cloud_file_storage.model.User;
 import com.example.Cloud_file_storage.repository.UserRepository;
 import com.example.Cloud_file_storage.security.CustomUserDetails;
@@ -32,9 +34,10 @@ public class AuthService {
     private final AuthenticationManager authenticationManager;
     private final HttpServletRequest request;
     private final FolderService folderService;
+    private final UserMapper userMapper;
 
     @Transactional
-    public User signUp(String username, String password) {
+    public UserResponseDto signUp(String username, String password) {
         if (userRepository.existsUserByUsername(username)) {
             throw new LoginAlreadyTakenException("Login already taken ");
         }
@@ -53,25 +56,16 @@ public class AuthService {
         }
 
         authUser(username, password);
-        return user;
+        return userMapper.toResponseDto(user);
     }
 
-    public User signIn(String login, String password) {
+    public UserResponseDto signIn(String login, String password) {
         try {
             authUser(login, password);
-            return getAuthenticatedUser();
+            User user = getAuthenticatedUser();
+            return userMapper.toResponseDto(user);
         } catch (BadCredentialsException e) {
-            throw new WrongPasswordException("Invalid credentials ");
-        }
-    }
-
-    public void logOut(HttpSession session) {
-        try {
-            session.invalidate();
-            SecurityContextHolder.clearContext();
-            log.info("User logged out successfully ");
-        } catch (Exception e) {
-            throw new UnknownException("Logout failed ");
+            throw new WrongPasswordException("Invalid credentials");
         }
     }
 
@@ -80,7 +74,6 @@ public class AuthService {
                 new UsernamePasswordAuthenticationToken(login, password));
         SecurityContext securityContext = SecurityContextHolder.getContext();
         securityContext.setAuthentication(authentication);
-
 
         HttpSession session = request.getSession(true);
         session.setAttribute(HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY, securityContext);

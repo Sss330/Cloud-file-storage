@@ -11,7 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
-@RestControllerAdvice
+@RestControllerAdvice()
 public class StorageControllerAdvice {
 
     @ExceptionHandler(InvalidPathException.class)
@@ -40,11 +40,17 @@ public class StorageControllerAdvice {
 
     @ExceptionHandler(ResourceConflictException.class)
     public ResponseEntity<String> resourceConflictException(ResourceConflictException ex) {
-        return ResponseEntity.status(HttpStatus.CONFLICT).body("{\"message\": \"Resource conflict pls try other name or path  \"}");
+        return ResponseEntity.status(HttpStatus.CONFLICT).body("{\"message\": \"Resource conflict pls try other name or path\"}");
     }
 
     @ExceptionHandler(MinioException.class)
     public ResponseEntity<String> handleMinioException(MinioException e) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body("{\"message\": \"Storage error: " + e.getMessage() + "\"}");
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<String> genericException(Exception ex) {
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("{\"message\": \"Oops we`re sorry, unknown error, pls try later again\"}");
     }
 }

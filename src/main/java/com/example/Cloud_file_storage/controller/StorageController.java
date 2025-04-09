@@ -4,9 +4,9 @@ package com.example.Cloud_file_storage.controller;
 import com.example.Cloud_file_storage.dto.ResourceInfoDto;
 import com.example.Cloud_file_storage.security.CustomUserDetails;
 import com.example.Cloud_file_storage.service.StorageService;
-import com.example.Cloud_file_storage.service.storage.FolderService;
 import io.swagger.v3.oas.annotations.Operation;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -15,27 +15,26 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.ArrayList;
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/resource")
 @RequiredArgsConstructor
+@Slf4j
 public class StorageController {
 
     private final StorageService storageService;
-    private final FolderService folderService;
 
     @Operation(summary = "Get info about resource")
     @GetMapping
-    public ResponseEntity<ResourceInfoDto> getResourceInfo(@AuthenticationPrincipal CustomUserDetails user, @RequestParam String path) throws Exception {
+    public ResponseEntity<ResourceInfoDto> getResourceInfo(@AuthenticationPrincipal CustomUserDetails user, @RequestParam String path) {
         return ResponseEntity
                 .ok()
                 .body(storageService.getResourceInfo(path, user.getUser().getId()));
     }
 
     @DeleteMapping
-    public ResponseEntity<Void> deleteResource(@AuthenticationPrincipal CustomUserDetails user, @RequestParam String path) throws Exception {
+    public ResponseEntity<Void> deleteResource(@AuthenticationPrincipal CustomUserDetails user, @RequestParam String path) {
         storageService.deleteResource(path, user.getUser().getId());
         return ResponseEntity
                 .noContent()
@@ -68,13 +67,9 @@ public class StorageController {
     public ResponseEntity<List<ResourceInfoDto>> uploadResource(
             @AuthenticationPrincipal CustomUserDetails user,
             @RequestParam String path,
-            @RequestParam("object") MultipartFile[] files) throws Exception {
-        List<ResourceInfoDto> uploadedResources = new ArrayList<>();
-        for (MultipartFile file : files) {
-            String filePath = path + file.getOriginalFilename();
-            ResourceInfoDto resourceInfo = storageService.uploadResource(filePath, file.getInputStream(), file.getSize(), user.getUser().getId());
-            uploadedResources.add(resourceInfo);
-        }
-        return ResponseEntity.status(HttpStatus.CREATED).body(uploadedResources);
+            @RequestParam("object") MultipartFile[] files) {
+        return ResponseEntity
+                .status(HttpStatus.CREATED)
+                .body(storageService.processingUserResource(files, path, user));
     }
 }

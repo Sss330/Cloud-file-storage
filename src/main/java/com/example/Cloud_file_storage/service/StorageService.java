@@ -2,22 +2,25 @@ package com.example.Cloud_file_storage.service;
 
 
 import com.example.Cloud_file_storage.dto.ResourceInfoDto;
-import com.example.Cloud_file_storage.exception.common.UnknownException;
 import com.example.Cloud_file_storage.exception.storage.DeletingResourceException;
 import com.example.Cloud_file_storage.exception.storage.InvalidPathException;
 import com.example.Cloud_file_storage.exception.storage.ResourceNotFoundException;
+import com.example.Cloud_file_storage.security.CustomUserDetails;
 import com.example.Cloud_file_storage.service.storage.FileService;
 import com.example.Cloud_file_storage.service.storage.FolderService;
 import io.minio.*;
-import io.minio.errors.ErrorResponseException;
 import io.minio.messages.Item;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -33,7 +36,9 @@ public class StorageService {
     private final FileService fileService;
     private final FolderService folderService;
 
-    public ResourceInfoDto getResourceInfo(String path, Long id) throws Exception {
+    public ResourceInfoDto getResourceInfo(String path, Long id) {
+        validatePath(path);
+
         try {
             String fullPath = makePathForCurrentUser(path, id);
 
@@ -41,14 +46,14 @@ public class StorageService {
                 return folderService.getFolderInfo(fullPath, id);
             }
             return fileService.getFileInfo(fullPath, id);
-        } catch (ErrorResponseException e) {
-            throw new ResourceNotFoundException("Resource not found " + path);
         } catch (Exception e) {
-            throw new UnknownException("Failed to get resource info ");
+            throw new ResourceNotFoundException("Resource not found " + path);
         }
     }
 
-    public void deleteResource(String path, Long id) throws Exception {
+    public void deleteResource(String path, Long id) {
+        validatePath(path);
+
         path = makePathForCurrentUser(path, id);
         try {
             if (isFolder(path)) {
@@ -67,13 +72,8 @@ public class StorageService {
     }
 
     public ResourceInfoDto moveResource(String from, String to, Long id) throws Exception {
-       /* if (!isResourceExists(from)) {
-            throw new ResourceNotFoundException("Resource not found " + from);
-        }
-
-        if (isResourceExists(to)) {
-            throw new ResourceConflictException("Resource already exist  " + to);
-        }*/
+        validatePath(from);
+        validatePath(to);
 
         if (isFolder(from)) {
             folderService.moveFolder(from, to, id);
@@ -85,6 +85,8 @@ public class StorageService {
     }
 
     public InputStream downloadResource(String path, Long id) throws Exception {
+        validatePath(path);
+
         if (isFolder(path)) {
             return folderService.downloadFolder(path, id);
         }
@@ -105,6 +107,8 @@ public class StorageService {
     }
 
     public List<ResourceInfoDto> searchResource(String query, Long id) throws Exception {
+        validatePath(query);
+
         if (query.isEmpty() || query.isBlank()) {
             throw new InvalidPathException("Query is invalid, or empty " + query);
         }
@@ -127,7 +131,7 @@ public class StorageService {
 
                 String cleanPath = objectName.substring(userPrefix.length());
                 results.add(ResourceInfoDto.builder()
-                        .path(getCleanParentPath(cleanPath, id))
+                        .path(getCleanParentPath(cleanPath))
                         .name(getResourceName(cleanPath))
                         .size(item.size())
                         .type(item.isDir() ? "DIRECTORY" : "FILE")
@@ -138,21 +142,74 @@ public class StorageService {
     }
 
     public ResourceInfoDto uploadResource(String path, InputStream inputStream, Long size, Long id) throws Exception {
+        validatePath(path);
         String fullPath = makePathForCurrentUser(path, id);
-        if (isResourceExists(path)) {
 
+        createParentDirectories(fullPath, id);
+
+        try (InputStream is = inputStream) {
+            client.putObject(
+                    PutObjectArgs.builder()
+                            .stream(is, size, -1)
+                            .object(fullPath)
+                            .bucket(bucketName)
+                            .build());
         }
-        String dsa = getResourceName(fullPath);
 
-        client.putObject(PutObjectArgs.builder()
-                .stream(inputStream, size, -1)
-                .object(fullPath)
-                .bucket(bucketName)
-                .build());
-        return getResourceInfo(getResourceName(fullPath), id);
+        return getResourceInfo(fullPath, id);
     }
 
-    private String getCleanParentPath(String fullPath, Long id) {
+    public List<ResourceInfoDto> processingUserResource(@RequestParam("object") MultipartFile[] files, String path, CustomUserDetails user) {
+        List<ResourceInfoDto> resourceInfoList = new ArrayList<>();
+
+        for (MultipartFile file : files) {
+            String normalizedPath = path.replace("\\", "/");
+            String filePath = Paths.get(normalizedPath, file.getOriginalFilename()).toString();
+
+            try (InputStream inputStream = file.getInputStream()) {
+                ResourceInfoDto resourceInfo = uploadResource(
+                        filePath.replace("\\", "/"),
+                        inputStream,
+                        file.getSize(),
+                        user.getUser().getId()
+                );
+                resourceInfoList.add(resourceInfo);
+            } catch (Exception e) {
+                log.error("Error uploading resource {}", file.getOriginalFilename());
+            }
+        }
+        return resourceInfoList;
+    }
+
+    private void createParentDirectories(String fullPath, Long id) throws Exception {
+
+        String userPrefix = "user-" + id + "-files/";
+        String relativePath = fullPath.substring(userPrefix.length());
+
+        String normalizedPath = relativePath.replace("\\", "/");
+        String[] parts = normalizedPath.split("/");
+
+        StringBuilder currentPath = new StringBuilder(userPrefix);
+
+
+        for (int i = 0; i < parts.length - 1; i++) {
+            if (parts[i].isEmpty()) continue;
+
+            currentPath.append(parts[i]).append("/");
+            String dirPath = currentPath.toString();
+
+            if (resourceNotExists(dirPath)) {
+                client.putObject(
+                        PutObjectArgs.builder()
+                                .bucket(bucketName)
+                                .object(dirPath)
+                                .stream(new ByteArrayInputStream(new byte[0]), 0, -1)
+                                .build());
+            }
+        }
+    }
+
+    private String getCleanParentPath(String fullPath) {
         int lastSlash = fullPath.lastIndexOf('/');
         return lastSlash >= 0 ? fullPath.substring(0, lastSlash + 1) : "";
     }
@@ -168,16 +225,16 @@ public class StorageService {
         return path.replace("/", "_").replaceAll("_+$", "");
     }
 
-    private boolean isResourceExists(String path) {
+    private boolean resourceNotExists(String path) {
         try {
             client.statObject(
                     StatObjectArgs.builder()
                             .bucket(bucketName)
                             .object(path)
                             .build());
-            return true;
-        } catch (Exception e) {
             return false;
+        } catch (Exception e) {
+            return true;
         }
     }
 
@@ -196,9 +253,6 @@ public class StorageService {
             throw new InvalidPathException("Invalid path " + path);
         }
 
-        if (!path.matches("^[a-zA-Z0-9_\\-/]+$")) {
-            throw new InvalidPathException("Invalid characters in path " + path);
-        }
     }
 }
 

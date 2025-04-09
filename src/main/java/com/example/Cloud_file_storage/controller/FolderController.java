@@ -28,7 +28,7 @@ public class FolderController {
     }
 
     @GetMapping
-    public ResponseEntity<List<ResourceInfoDto>> getFolderContent(@AuthenticationPrincipal CustomUserDetails user, @RequestParam String path) throws Exception {
+    public ResponseEntity<List<ResourceInfoDto>> getFolderContent(@AuthenticationPrincipal CustomUserDetails user, @RequestParam String path) {
         return ResponseEntity
                 .ok()
                 .body(folderService.getFolderContent(path, user.getUser().getId()));

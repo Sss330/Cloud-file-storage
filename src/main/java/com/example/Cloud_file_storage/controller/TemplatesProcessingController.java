@@ -4,7 +4,7 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 
 @Controller
-public class FilesController {
+public class TemplatesProcessingController {
 
     @GetMapping(value = {"/registration", "/login", "/files/**"})
     public String handleRefresh() {
