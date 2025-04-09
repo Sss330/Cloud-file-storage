@@ -14,21 +14,8 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.stream.Collectors;
 
-@RestControllerAdvice
+@RestControllerAdvice()
 public class AuthControllerAdvice {
-
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<String> handleValidationException(MethodArgumentNotValidException ex) {
-        String errorDetails = ex.getBindingResult().getFieldErrors()
-                .stream()
-                .map(DefaultMessageSourceResolvable::getDefaultMessage)
-                .distinct()
-                .collect(Collectors.joining(", "));
-
-        String responseMessage = String.format("%s", errorDetails);
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body("{\"message\": \"" + responseMessage + "\"}");
-    }
 
     @ExceptionHandler(LoginAlreadyTakenException.class)
     public ResponseEntity<String> loginTakenException(LoginAlreadyTakenException ex) {
@@ -54,15 +41,28 @@ public class AuthControllerAdvice {
                 .body("{\"message\": \"Database operation failed, Please try again later\"}");
     }
 
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<String> genericException(Exception ex) {
-        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                .body("{\"message\": \"Oops we`re sorry, unknown error, pls try later again\"}");
-    }
-
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<String> genericException(AccessDeniedException ex) {
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                 .body("{\"message\": \"Access denied, u`r not authorized\"}");
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<String> handleValidationException(MethodArgumentNotValidException ex) {
+        String errorDetails = ex.getBindingResult().getFieldErrors()
+                .stream()
+                .map(DefaultMessageSourceResolvable::getDefaultMessage)
+                .distinct()
+                .collect(Collectors.joining(", "));
+
+        String responseMessage = String.format("%s", errorDetails);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body("{\"message\": \"" + responseMessage + "\"}");
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<String> genericException(Exception ex) {
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                .body("{\"message\": \"Oops we`re sorry, unknown error, pls try later again\"}");
     }
 }

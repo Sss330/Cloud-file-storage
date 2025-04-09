@@ -15,10 +15,11 @@ import java.io.InputStream;
 public class FileService {
 
     private final MinioClient client;
+    private final FolderService folderService;
     @Value("${minio.bucket}")
     String bucketName;
 
-    public ResourceInfoDto getFileInfo(String path) throws Exception {
+    public ResourceInfoDto getFileInfo(String path, Long id) {
         try {
             if (path == null || path.isEmpty()) {
                 throw new BadRequestException("Invalid path: " + path);
@@ -32,7 +33,7 @@ public class FileService {
 
             return
                     ResourceInfoDto.builder()
-                            .path(path)
+                            .path(folderService.getParentPath(path, id))
                             .name(getResourceName(path))
                             .size(stat.size())
                             .type("FILE")
@@ -48,10 +49,10 @@ public class FileService {
                         .bucket(bucketName)
                         .object(path)
                         .build());
-
     }
 
-    public InputStream downloadFile(String path) throws Exception {
+    public InputStream downloadFile(String path, Long id) throws Exception {
+        path = makePathForCurrentUser(path, id);
         return client.getObject(
                 GetObjectArgs.builder()
                         .bucket(bucketName)
@@ -59,7 +60,10 @@ public class FileService {
                         .build());
     }
 
-    public void moveFile(String from, String to) throws Exception {
+    public void moveFile(String from, String to, Long id) throws Exception {
+        from = makePathForCurrentUser(from, id);
+        to = makePathForCurrentUser(to, id);
+
         client.copyObject(
                 CopyObjectArgs.builder()
                         .bucket(bucketName)
@@ -74,6 +78,10 @@ public class FileService {
                         .object(from)
                         .build()
         );
+    }
+
+    private String makePathForCurrentUser(String path, Long id) {
+        return "user-" + id + "-files/" + path;
     }
 
     private String getResourceName(String path) {
